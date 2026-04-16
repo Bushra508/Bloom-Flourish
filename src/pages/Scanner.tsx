@@ -2,11 +2,10 @@ import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Upload, Camera, Leaf, Sprout, AlertTriangle, CheckCircle,
+  Upload, Camera, Leaf, Sprout, CheckCircle,
   Scissors, Eye, FlaskConical, Pill, BookOpen, Plus, Phone, RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
@@ -106,10 +105,6 @@ const Scanner = () => {
     setShowNewPlant(false);
   };
 
-  const severityColor = mockResult.severity < 30 ? "text-primary" :
-    mockResult.severity < 60 ? "text-yellow-500" : "text-destructive";
-  const severityBg = mockResult.severity < 30 ? "bg-primary/5" :
-    mockResult.severity < 60 ? "bg-yellow-50" : "bg-destructive/5";
   const tag = mockResult.severity < 30 ? "healthy" : mockResult.severity < 60 ? "monitor" : "unhealthy";
 
   const uploadImage = async (): Promise<string | null> => {
@@ -264,12 +259,6 @@ const Scanner = () => {
                     <div className="relative">
                       <img src={uploadedImage} alt="Scanned leaf" className="w-full aspect-square object-cover" />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
-                      <div className="absolute bottom-4 left-4 right-4">
-                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${severityBg} ${severityColor}`}>
-                          <AlertTriangle className="w-3 h-3" />
-                          {mockResult.severityLabel} severity detected
-                        </span>
-                      </div>
                     </div>
                   ) : (
                     <div className="aspect-square flex items-center justify-center bg-secondary/30">
@@ -291,13 +280,6 @@ const Scanner = () => {
                       <div className="text-2xl font-bold text-primary">{mockResult.confidence}%</div>
                       <div className="text-xs text-muted-foreground">Confidence</div>
                     </div>
-                  </div>
-                  <div className={`rounded-xl p-4 ${severityBg}`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-foreground">Severity Index</span>
-                      <span className={`text-sm font-semibold ${severityColor}`}>{mockResult.severity}%</span>
-                    </div>
-                    <Progress value={mockResult.severity} className="h-2.5 rounded-full bg-white/60" />
                   </div>
                 </motion.div>
 
