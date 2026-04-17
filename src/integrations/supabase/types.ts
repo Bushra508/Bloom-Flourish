@@ -83,6 +83,36 @@ export type Database = {
         }
         Relationships: []
       }
+      disease_info: {
+  Row: {
+    id: string
+    label: string
+    description: string | null
+    actions: Json | null
+    organic: Json | null
+    chemical: Json | null
+    created_at: string
+  }
+  Insert: {
+    id?: string
+    label: string
+    description?: string | null
+    actions?: Json | null
+    organic?: Json | null
+    chemical?: Json | null
+    created_at?: string
+  }
+  Update: {
+    id?: string
+    label?: string
+    description?: string | null
+    actions?: Json | null
+    organic?: Json | null
+    chemical?: Json | null
+    created_at?: string
+  }
+  Relationships: []
+}
       profiles: {
         Row: {
           created_at: string

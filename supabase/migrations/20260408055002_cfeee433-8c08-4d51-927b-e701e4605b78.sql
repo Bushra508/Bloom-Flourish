@@ -6,7 +6,7 @@ CREATE TABLE public.plants (
   name text NOT NULL,
   scan_date timestamptz NOT NULL DEFAULT now(),
   issue text,
-  confidence_score integer,
+  confidence_score float,
   main_cure text,
   tag text NOT NULL DEFAULT 'healthy' CHECK (tag IN ('healthy', 'unhealthy', 'monitor')),
   image_url text,

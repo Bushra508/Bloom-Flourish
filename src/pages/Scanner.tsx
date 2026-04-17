@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { predictImage } from "@/integrations/predictapi";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -20,25 +21,10 @@ const fadeUp = {
   }),
 };
 
-const mockResult = {
-  disease: "Leaf Blight",
-  confidence: 92,
-  severity: 65,
-  severityLabel: "Moderate",
-  description: "Fungal infection causing brown necrotic patches on leaf margins. Early-to-mid stage detected.",
-  actions: [
-    { icon: Scissors, label: "Prune", desc: "Remove affected leaves immediately to prevent spread" },
-    { icon: Eye, label: "Monitor", desc: "Check neighboring plants daily for signs of infection" },
-    { icon: Sprout, label: "Treat", desc: "Apply treatment to the entire plant including healthy areas" },
-  ],
-  organic: [
-    { name: "Neem Oil Spray", dosage: "5ml per liter of water, apply every 7 days" },
-    { name: "Baking Soda Mix", dosage: "1 tsp per liter + few drops dish soap" },
-  ],
-  chemical: [
-    { name: "Mancozeb 75% WP", dosage: "2g per liter, spray at 10-day intervals" },
-    { name: "Chlorothalonil", dosage: "2ml per liter, max 4 applications per season" },
-  ],
+const iconMap: Record<string, any> = {
+  scissors: Scissors,
+  eye: Eye,
+  sprout: Sprout,
 };
 
 type Phase = "upload" | "scanning" | "results";
@@ -74,16 +60,53 @@ const Scanner = () => {
     fetchPlants();
   }, [user, phase]);
 
-  const handleFile = useCallback((file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = e.target?.result as string;
-      setUploadedImage(img);
-      setPhase("scanning");
-      setTimeout(() => setPhase("results"), 3000);
-    };
-    reader.readAsDataURL(file);
-  }, []);
+const [prediction, setPrediction] = useState<any>(null);
+const [allPredictions, setAllPredictions] = useState<any[]>([]);
+const [diseaseInfo, setDiseaseInfo] = useState<any>(null);
+const disease = prediction?.label?.split(" | ")[1]?.trim().toLowerCase();
+
+const handleFile = useCallback((file: File) => {
+  const reader = new FileReader();
+
+  reader.onload = async (e) => {
+    const img = e.target?.result as string;
+    setUploadedImage(img);
+    setPhase("scanning");
+
+    try {
+      const result = await predictImage(file);
+
+      if (result?.success) {
+        setPrediction(result.top_prediction);
+        setAllPredictions(result.all_predictions);
+
+        // FETCH FROM SUPABASE
+        const { data, error } = await supabase
+          .from("disease_info")
+          .select("*")
+          .eq("label", result.top_prediction.label)
+          .single();
+
+        if (error) {
+          console.error("Supabase fetch error:", error);
+        } else {
+          setDiseaseInfo(data);
+        }
+
+        setPhase("results");
+      } else {
+        console.error(result?.error);
+        setPhase("upload");
+      }
+
+    } catch (err) {
+      console.error("API error:", err);
+      setPhase("upload");
+    }
+  };
+
+  reader.readAsDataURL(file);
+}, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -105,7 +128,7 @@ const Scanner = () => {
     setShowNewPlant(false);
   };
 
-  const tag = mockResult.severity < 30 ? "healthy" : mockResult.severity < 60 ? "monitor" : "unhealthy";
+  const tag = disease === "healthy" ? "healthy" : "unhealthy";
 
   const uploadImage = async (): Promise<string | null> => {
     if (!uploadedImage || !user) return null;
@@ -130,9 +153,9 @@ const Scanner = () => {
     const insertData = {
       user_id: user.id,
       name: plantName,
-      issue: mockResult.disease,
-      confidence_score: mockResult.confidence,
-      main_cure: mockResult.organic[0]?.name || null,
+      issue: prediction?.label || "Unknown",
+      confidence_score: prediction ? parseFloat((prediction.confidence * 100).toFixed(2)) : 0,
+      main_cure: diseaseInfo?.organic?.[0]?.name || null,
       tag,
       image_url: imageUrl,
     };
@@ -273,11 +296,11 @@ const Scanner = () => {
                 <motion.div className="bg-card rounded-2xl border border-border/50 p-6" initial="hidden" animate="visible" variants={fadeUp} custom={2}>
                   <div className="flex items-start justify-between mb-4">
                     <div>
-                      <h1 className="font-display text-2xl md:text-3xl font-bold text-foreground">{mockResult.disease}</h1>
-                      <p className="text-muted-foreground text-sm mt-1">{mockResult.description}</p>
+                      <h1 className="font-display text-2xl md:text-3xl font-bold text-foreground">{prediction?.label || "Unknown"}</h1>
+                      <p className="text-muted-foreground text-sm mt-1">{diseaseInfo?.description || "No description available"}</p>
                     </div>
                     <div className="text-right shrink-0 ml-4">
-                      <div className="text-2xl font-bold text-primary">{mockResult.confidence}%</div>
+                      <div className="text-2xl font-bold text-primary">{prediction ? (prediction.confidence * 100).toFixed(2) : 0}%</div>
                       <div className="text-xs text-muted-foreground">Confidence</div>
                     </div>
                   </div>
@@ -286,13 +309,15 @@ const Scanner = () => {
                 <motion.div className="bg-card rounded-2xl border border-border/50 p-6" initial="hidden" animate="visible" variants={fadeUp} custom={3}>
                   <h2 className="font-display text-lg font-semibold text-foreground mb-4">Action Plan</h2>
                   <div className="grid sm:grid-cols-3 gap-3">
-                    {mockResult.actions.map((action) => (
+                    {diseaseInfo?.actions?.map((action: any) => {const Icon = iconMap[action.icon] || Leaf;
+                      return(
                       <div key={action.label} className="rounded-xl bg-secondary/40 p-4 hover:bg-secondary/60 transition-colors">
-                        <action.icon className="w-5 h-5 text-primary mb-2" />
+                        <Icon className="w-5 h-5 text-primary mb-2" />
                         <h4 className="text-sm font-semibold text-foreground mb-1">{action.label}</h4>
                         <p className="text-xs text-muted-foreground leading-relaxed">{action.desc}</p>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </motion.div>
 
@@ -305,7 +330,7 @@ const Scanner = () => {
                         <span className="text-sm font-semibold text-foreground">Organic</span>
                       </div>
                       <div className="space-y-3">
-                        {mockResult.organic.map((s) => (
+                        {diseaseInfo?.organic?.map((s: any) => (
                           <div key={s.name} className="rounded-lg bg-primary/5 p-3">
                             <p className="text-sm font-medium text-foreground">{s.name}</p>
                             <p className="text-xs text-muted-foreground mt-0.5">{s.dosage}</p>
@@ -319,7 +344,7 @@ const Scanner = () => {
                         <span className="text-sm font-semibold text-foreground">Chemical</span>
                       </div>
                       <div className="space-y-3">
-                        {mockResult.chemical.map((s) => (
+                        {diseaseInfo?.chemical?.map((s: any) => (
                           <div key={s.name} className="rounded-lg bg-destructive/5 p-3">
                             <p className="text-sm font-medium text-foreground">{s.name}</p>
                             <p className="text-xs text-muted-foreground mt-0.5">{s.dosage}</p>
