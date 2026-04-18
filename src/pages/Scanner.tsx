@@ -77,14 +77,24 @@ const handleFile = useCallback((file: File) => {
       const result = await predictImage(file);
 
       if (result?.success) {
-        setPrediction(result.top_prediction);
-        setAllPredictions(result.all_predictions);
+        const preds = result.all_predictions;
+        let finalPrediction = preds[0];
+        // condition: biased strawberry override
+        if (
+          finalPrediction.label.toLowerCase().includes("strawberry | leaf scorch") &&
+          finalPrediction.confidence < 0.995 &&
+          preds.length > 1
+        ) {
+          finalPrediction = preds[1];
+        }
 
+        setPrediction(finalPrediction);
+        setAllPredictions(preds);
         // FETCH FROM SUPABASE
         const { data, error } = await supabase
           .from("disease_info")
           .select("*")
-          .eq("label", result.top_prediction.label)
+          .eq("label", finalPrediction.label)
           .single();
 
         if (error) {
@@ -296,7 +306,7 @@ const handleFile = useCallback((file: File) => {
                 <motion.div className="bg-card rounded-2xl border border-border/50 p-6" initial="hidden" animate="visible" variants={fadeUp} custom={2}>
                   <div className="flex items-start justify-between mb-4">
                     <div>
-                      <h1 className="font-display text-2xl md:text-3xl font-bold text-foreground">{prediction?.label || "Unknown"}</h1>
+                      <h1 className="font-display text-2xl md:text-3xl font-bold text-foreground">{prediction?.label?.split(" | ")[1] || "Unknown"}</h1>
                       <p className="text-muted-foreground text-sm mt-1">{diseaseInfo?.description || "No description available"}</p>
                     </div>
                     <div className="text-right shrink-0 ml-4">
